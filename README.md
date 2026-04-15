@@ -33,8 +33,10 @@ Usage
 1. Prepare your glossary in glossary.xlsx (ensure it has 'English' and 'Turkish' columns).
 
 2. Run the script:
+  ```
   python3 translator.py
+ ```
 
-3. Paste the GitHub "edit" or "blob" URL when prompted.
+4. Paste the GitHub "edit" or "blob" URL when prompted.
 
-4. The translated file will be generated in the same directory.
+5. The translated file will be generated in the same directory.
