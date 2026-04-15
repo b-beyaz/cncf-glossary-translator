@@ -19,7 +19,7 @@ class CNCFTranslator:
     def load_local_glossary(self):
         try:
             if not os.path.exists(self.glossary_path):
-                print(f"Uyarı: {self.glossary_path} dosyası bulunamadı.")
+                print(f"Warning: File {self.glossary_path} not found.")
                 return ""
             
             if self.glossary_path.endswith('.xlsx'):
