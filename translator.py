@@ -99,7 +99,7 @@ if __name__ == "__main__":
     if not filename.endswith(".md"):
         filename = "translated_output.md"
 
-    print(f"İşlem başladı... Hedef dosya: {filename}")
+    print(f"The process has started... Target file: {filename}")
     output = translator.translate(target_url)
     
     with open(filename, "w", encoding="utf-8") as f:
