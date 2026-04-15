@@ -10,7 +10,7 @@ load_dotenv()
 class CNCFTranslator:
     def __init__(self):
         self.api_key = os.getenv("ANTHROPIC_API_KEY")
-        self.glossary_path = os.getenv("GLOSSARY_PATH", "glossary.xlsx")
+        self.glossary_path = os.getenv("GLOSSARY_PATH", "glossary.csv")
         
         if not self.api_key:
             raise ValueError("ANTHROPIC_API_KEY not found!")
