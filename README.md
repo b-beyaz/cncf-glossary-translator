@@ -16,7 +16,7 @@ An automated localization tool designed specifically for the [CNCF Glossary](htt
 
 1. Clone the repository:
    ```bash
-   git clone [https://github.com/yourusername/cncf-glossary-translator.git](https://github.com/yourusername/cncf-glossary-translator.git)
+   git clone https://github.com/b-beyaz/cncf-glossary-translator.git
    cd cncf-glossary-translator
    ```
 2. Install dependencies:
