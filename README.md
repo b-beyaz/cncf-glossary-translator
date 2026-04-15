@@ -24,7 +24,9 @@ An automated localization tool designed specifically for the [CNCF Glossary](htt
    pip install -r requirements.txt
      ```
 3. Setup environment variables:
+   ```
    cp .env.example .env
+    ```
    Edit the .env file and add your ANTHROPIC_API_KEY.
 
 Usage
