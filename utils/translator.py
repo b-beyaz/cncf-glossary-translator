@@ -9,12 +9,35 @@ load_dotenv()
 
 class CNCFTranslator:
     def __init__(self):
-        self.api_key = os.getenv("ANTHROPIC_API_KEY")
         self.glossary_path = os.getenv("GLOSSARY_PATH", "glossary.csv")
-        
-        if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY not found!")
-        self.client = anthropic.Anthropic(api_key=self.api_key)
+
+        # Detect authentication mode: Vertex AI or Direct API
+        vertex_project_id = os.getenv("ANTHROPIC_VERTEX_PROJECT_ID")
+
+        if vertex_project_id:
+            # Use Vertex AI / Google Cloud authentication
+            region = os.getenv("CLOUD_ML_REGION", "us-east5")
+            print(f"Initializing with Vertex AI (project: {vertex_project_id}, region: {region})")
+            self.client = anthropic.AnthropicVertex(
+                project_id=vertex_project_id,
+                region=region
+            )
+            # Default model for Vertex AI
+            self.model = os.getenv("MODEL_NAME", "claude-sonnet-4-5@20250929")
+        else:
+            # Use direct Anthropic API authentication
+            self.api_key = os.getenv("ANTHROPIC_API_KEY")
+            if not self.api_key:
+                raise ValueError(
+                    "Authentication required: Set either ANTHROPIC_API_KEY "
+                    "or ANTHROPIC_VERTEX_PROJECT_ID environment variable"
+                )
+            print("Initializing with direct Anthropic API")
+            self.client = anthropic.Anthropic(api_key=self.api_key)
+            # Default model for Direct API
+            self.model = os.getenv("MODEL_NAME", "claude-sonnet-4-20250514")
+
+        print(f"Using model: {self.model}")
 
     def load_local_glossary(self):
         try:
@@ -96,7 +119,7 @@ class CNCFTranslator:
 
         try:
             response = self.client.messages.create(
-                model="claude-sonnet-4-20250514", 
+                model=self.model,
                 max_tokens=8192,
                 system=system_msg,
                 messages=[{"role": "user", "content": source_text}]

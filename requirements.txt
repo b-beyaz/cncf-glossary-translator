@@ -1,4 +1,4 @@
-anthropic
+anthropic[vertex]
 pandas
 requests
 python-dotenv
