@@ -4,3 +4,5 @@ requests
 python-dotenv
 openpyxl
 tabulate
+streamlit        
+streamlit-toast

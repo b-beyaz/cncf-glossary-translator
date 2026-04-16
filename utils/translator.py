@@ -64,8 +64,12 @@ class CNCFTranslator:
         3. FORMAT:
            - Headers: Always include a single space after '#' symbols (e.g., '## Header').
            - Spacing: Ensure exactly one blank line exists between paragraphs.
-           - Frontmatter: Keep the YAML structure (between --- lines) intact. Translate the values for 'title', 'category', and 'tags' based on the glossary, but DO NOT translate the keys themselves.
-
+           - Frontmatter: Keep the YAML structure (between --- lines) intact. 
+             For 'title', 'category', and 'tags' values, follow this PRIORITY:
+             1. Check the local glossary first. Use the exact term if found.
+             2. If a term is NOT in the glossary, translate it into Turkish according to CNCF/IT industry standards (e.g., 'storage' -> 'depolama', 'networking' -> 'ağ oluşturma'). 
+             3. DO NOT translate the keys (title:, category:, tags:), only the values.
+             4. Ensure tags remain comma-separated and technically accurate.
         4. SPECIFIC HEADERS:
            - "Problem it addresses" -> "Hangi Sorunları Çözer"
            - "How it helps" -> "Nasıl Yardımcı Olur"
@@ -76,7 +80,17 @@ class CNCFTranslator:
         6. TRANSLATION POLICY:
            - NEVER leave technical concepts in English (like 'Policy as Code') unless they are international units or acronyms (like 'HTTP', 'gRPC', 'IP').
            - Avoid literal translations that sound robotic. Use professional DevOps terminology.
-
+        
+        7.TERM SUGGESTIONS 
+            Analyze the source text for technical terms that are NOT in the glossary.
+        
+            RULES FOR SUGGESTIONS:
+            - ONLY suggest technical, cloud-native, or DevOps-specific terms (e.g., "Service Mesh", "Sidecar", "Reconciliation").
+            - DO NOT suggest terms already present in the provided glossary.
+            - FORMAT: You must provide suggestions at the VERY END of your response.
+            - OUTPUT FORMAT: 
+                SUGGESTIONS:
+                English Term,Recommended Turkish Translation
         Do not provide any introductory or concluding remarks. Return ONLY the translated markdown content.
         """
 
@@ -90,7 +104,21 @@ class CNCFTranslator:
             return response.content[0].text
         except Exception as e:
             return f"API Hatası: {e}"
+    def add_to_glossary(english, turkish, file_path="glossary.csv"):
+        new_data = pd.DataFrame([[english, turkish]], columns=["English", "Turkish"])
+    
+        if os.path.exists(file_path):
+            new_data.to_csv(file_path, mode='a', header=False, index=False, encoding='utf-8-sig')
+        else:
+            new_data.to_csv(file_path, index=False, encoding='utf-8-sig')
 
+    def save_translation(content, filename):
+        if not os.path.exists("outputs"):
+            os.makedirs("outputs")
+        target_path = os.path.join("outputs", filename)
+        with open(target_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        return target_path
 if __name__ == "__main__":
     translator = CNCFTranslator()
     target_url = input("GitHub Çeviri Linki: ")
