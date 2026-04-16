@@ -8,6 +8,8 @@ venv/
 *.md
 !README.md
 
-outputs/
+outputs/*
+!outputs/.gitkeep
+
 .ipynb_checkpoints/
 .streamlit/
