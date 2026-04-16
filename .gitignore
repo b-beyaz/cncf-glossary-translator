@@ -5,7 +5,9 @@ __pycache__/
 venv/
 .venv/
 
-glossary.xlsx
-
 *.md
 !README.md
+
+outputs/
+.ipynb_checkpoints/
+.streamlit/
