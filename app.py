@@ -1,9 +1,15 @@
 import streamlit as st
 import pandas as pd
 import re
+import os
 from utils.translator import CNCFTranslator
-from utils.file_ops import add_to_glossary, save_translation
+from utils.file_ops import add_to_glossary, save_translation, create_branch, push_to_remote
+from dotenv import load_dotenv
 
+load_dotenv()
+
+REPO_PATH = os.getenv("REPO_PATH") 
+BASE_BRANCH = os.getenv("BASE_BRANCH", "dev-tr")
 
 st.set_page_config(page_title="CNCF Glossary AI Suite", layout="wide")
 
@@ -53,7 +59,6 @@ if st.button("Start Translation"):
                 st.session_state['current_translation'] = main_text
                 st.session_state['suggestions'] = clean_suggestions
                 st.session_state['filename'] = translator.get_filename_from_url(url)
-                
             except Exception as e:
                 st.error(f"An error occurred during translation:: {e}")
     else:
@@ -66,10 +71,27 @@ if 'current_translation' in st.session_state:
         st.subheader("Translation Preview")
         st.text_area("Markdown Output", st.session_state['current_translation'], height=500)
         
-        if st.button("📥 Save it locally"):
-            path = save_translation(st.session_state['current_translation'], st.session_state['filename'])
-            st.success(f"The file has been successfully saved: {path}")
+        st.divider()
+        st.subheader("Git Operations")
 
+        clean_filename = st.session_state['filename'].replace(".md", "").replace(".", "-")
+        commit_message = st.text_input("Commit Message", value=f"Add Turkish localization for {clean_filename}", key="commit_msg_input")
+
+        if st.button("📥 Create Branch and Push To Gloassry"):
+            try:
+                new_branch_name = f"tr-{clean_filename}"
+                create_branch(REPO_PATH, BASE_BRANCH, new_branch_name)
+                st.info(f"Branch created: {new_branch_name}")
+                path = save_translation(st.session_state['current_translation'], st.session_state['filename'])
+                success = push_to_remote(REPO_PATH=REPO_PATH, new_branch=new_branch_name,filename=st.session_state['filename'],commit=commit_message)
+                if success:
+                    st.success(f"Successfully pushed to GitHub on branch {new_branch_name}!")
+                    st.balloons()
+                else:
+                    st.error("Push failed. Check your Git credentials or PAT.")
+                    
+            except Exception as e:
+                st.error(f"Git Error: {e}")
     with col2:
         st.subheader("🤖 Terminology Management")
         
@@ -98,6 +120,6 @@ if 'current_translation' in st.session_state:
                     final_tr = st.text_input("Çeviri:", value=tr.strip(), key=f"input_{eng}")
                     if st.button(f"Sözlüğe Ekle", key=f"btn_{eng}"):
                         add_to_glossary(eng.strip(), final_tr.strip())
-                        st.toast(f"'{eng}' sözlüğe eklendi!", icon="✅")
+                        st.toast(f"'{eng}' Added to the dictionary!", icon="✅")
         else:
-            st.success("Yeni bir terim önerisi bulunamadı. Sözlük kapsamı yeterli görünüyor.")
+            st.success("No new terminology was suggested. The dictionary scope appears sufficient.")

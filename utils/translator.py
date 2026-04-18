@@ -4,6 +4,7 @@ import pandas as pd
 import anthropic
 from dotenv import load_dotenv
 from urllib.parse import urlparse
+from utils.file_ops import read_glossary
 
 load_dotenv()
 
@@ -39,22 +40,6 @@ class CNCFTranslator:
 
         print(f"Using model: {self.model}")
 
-    def load_local_glossary(self):
-        try:
-            if not os.path.exists(self.glossary_path):
-                print(f"Warning: File {self.glossary_path} not found.")
-                return ""
-            
-            if self.glossary_path.endswith('.xlsx'):
-                df = pd.read_excel(self.glossary_path)
-            else:
-                df = pd.read_csv(self.glossary_path, encoding='utf-8-sig', sep=None, engine='python')
-            
-            print(f"Dictionary successfully loaded: {len(df)} words found.")
-            return df.to_markdown(index=False)
-        except Exception as e:
-            print(f"Error while reading the dictionary: {e}")
-            return ""
 
     def get_raw_url(self, url):
         return url.replace("https://github.com/", "https://raw.githubusercontent.com/").replace("/edit/", "/").replace("/blob/", "/")
@@ -71,7 +56,8 @@ class CNCFTranslator:
             return f"Error: Source file could not be reached. (Code:{content_res.status_code})"
 
         source_text = content_res.text
-        glossary = self.load_local_glossary()
+        
+        glossary = read_glossary(self.glossary_path)
 
         system_msg = f"""
         You are a professional CNCF Glossary translator specializing in Cloud Native technologies.
@@ -127,21 +113,7 @@ class CNCFTranslator:
             return response.content[0].text
         except Exception as e:
             return f"API Hatası: {e}"
-    def add_to_glossary(english, turkish, file_path="glossary.csv"):
-        new_data = pd.DataFrame([[english, turkish]], columns=["English", "Turkish"])
     
-        if os.path.exists(file_path):
-            new_data.to_csv(file_path, mode='a', header=False, index=False, encoding='utf-8-sig')
-        else:
-            new_data.to_csv(file_path, index=False, encoding='utf-8-sig')
-
-    def save_translation(content, filename):
-        if not os.path.exists("outputs"):
-            os.makedirs("outputs")
-        target_path = os.path.join("outputs", filename)
-        with open(target_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        return target_path
 if __name__ == "__main__":
     translator = CNCFTranslator()
     target_url = input("GitHub Çeviri Linki: ")
