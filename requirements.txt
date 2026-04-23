@@ -6,3 +6,6 @@ openpyxl
 tabulate
 streamlit
 GitPython
+streamlit-elements
+streamlit-ace
+python3-tk
