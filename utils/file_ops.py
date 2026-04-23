@@ -9,7 +9,6 @@ from git import Repo as GitRepo, InvalidGitRepositoryError
 import tkinter as tk
 from tkinter import filedialog
 
-
 load_dotenv(override=True)
 
 REPO_PATH = os.getenv("REPO_PATH", ".")
@@ -42,7 +41,9 @@ def git(repo_path, *args):
         text=True
     )
     if result.returncode != 0:
-        raise Exception(result.stderr.strip())
+        error_msg = result.stderr.strip() or result.stdout.strip() or "unknown git error"
+        logger.error(f"git {' '.join(args)} failed:\n  stdout: {result.stdout.strip()}\n  stderr: {result.stderr.strip()}\n  returncode: {result.returncode}")
+        raise Exception(error_msg)
     return result.stdout.strip()
 
 def create_branch(REPO_PATH, BASE_BRANCH, new_branch):
@@ -57,9 +58,7 @@ def push_to_remote(REPO_PATH, new_branch, filename, commit):
     try:
         authenticated_url = f"https://{curr_token}@github.com/{curr_user}/{repo_name}.git"
         git(REPO_PATH, "checkout", new_branch)
-        output_dir = os.getenv("OUTPUT_DIR", ".")
-        file_to_add = os.path.join(output_dir, filename)
-        git(REPO_PATH, "add", file_to_add)
+        git(REPO_PATH, "add", filename) 
         try:
             git(REPO_PATH, "commit", "--signoff", "-m", commit)
         except:
@@ -78,16 +77,15 @@ def push_new_file_to_branch(REPO_PATH, branch, filepath, content, commit_msg):
         os.makedirs(os.path.dirname(abs_path), exist_ok=True)
         with open(abs_path, "w", encoding="utf-8") as fh:
             fh.write(content)
-        logger.info(f"Dosya yazıldı: {abs_path}")
-
+        logger.info(f"File written: {abs_path}")
         git(REPO_PATH, "add", filepath)
-
         try:
             git(REPO_PATH, "commit", "--signoff", "-m", commit_msg)
-            logger.info(f"Commit atıldı: {commit_msg}")
+            logger.info(f"Commit was rejected: {commit_msg}")
         except Exception as e:
-            if "nothing to commit" in str(e).lower():
-                logger.info("Commit atlanıldı: staged değişiklik yok.")
+            err_str = str(e).lower()
+            if "nothing to commit" in err_str or "nothing added to commit" in err_str:
+                logger.info("Commit skipped: no staged changes.")
             else:
                 raise
         git(REPO_PATH, "push", authenticated_url, branch)
@@ -190,7 +188,7 @@ def render_sidebar_tree(
             else:
                 st.sidebar.markdown(f"{padding}📂 **{name}**")
                 render_sidebar_tree(subtree, repo_path, full_path, depth + 1, content_key, file_key)
-        else:  # Dosya
+        else:  
             icon = "📝" if name.endswith(".md") else "📄"
             btn_key = f"{file_key}__{full_path}"
             if st.sidebar.button(
@@ -247,3 +245,32 @@ def open_file_explorer_and_get_path(initial_dir="/mnt/c/glossary"):
     
     root.destroy()
     return file_path
+
+def push_multiple_files_to_branch(REPO_PATH, branch, files_dict, commit_msg):
+    repo_name = "glossary"
+    try:
+        authenticated_url = f"https://{curr_token}@github.com/{curr_user}/{repo_name}.git"
+        git(REPO_PATH, "checkout", branch)
+        for filepath, content in files_dict.items():
+            logger.info(f"filepath value: '{filepath}'")
+            abs_path = os.path.join(REPO_PATH, filepath)
+            os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+            with open(abs_path, "w", encoding="utf-8") as fh:
+                fh.write(content)
+            logger.info(f"File written:: {abs_path}")
+            git(REPO_PATH, "add", filepath)
+        try:
+            git(REPO_PATH, "commit", "--signoff", "-m", commit_msg)
+            logger.info(f"Commit was rejected: {commit_msg}")
+        except Exception as e:
+            err_str = str(e).lower()
+            if "nothing to commit" in err_str or "nothing added to commit" in err_str:
+                logger.info("Commit skipped: no changes.")
+            else:
+                raise
+        git(REPO_PATH, "push", authenticated_url, branch)
+        logger.info(f"Push successful → branch: {branch}")
+        return True
+    except Exception as e:
+        logger.error(f"push_multiple_files_to_branch hatası: {repr(e)}")
+        raise Exception(f"Git Push Error: {str(e)}")
