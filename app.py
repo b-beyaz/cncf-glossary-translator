@@ -48,7 +48,7 @@ with st.sidebar:
         if os.path.exists("glossary.csv"):
             st.dataframe(
                 pd.read_csv("glossary.csv"),
-                use_container_width=True,
+                width='stretch',
                 hide_index=True,
             )
         else:

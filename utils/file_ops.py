@@ -194,7 +194,7 @@ def render_sidebar_tree(
             if st.sidebar.button(
                 f"{padding}{icon} {name}",
                 key=btn_key,
-                use_container_width=True,
+                width='stretch',
             ):
                 st.session_state[file_key] = full_path
                 abs_path = os.path.join(repo_path, full_path)
