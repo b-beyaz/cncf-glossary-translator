@@ -21,16 +21,46 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 
+import os
+
+import os
+
+import csv
+
 def add_to_glossary(english, turkish, file_path="glossary.csv"):
-    new_data = pd.DataFrame([[english, turkish]], columns=["English", "Turkish"])
     try:
+        # Duplicate kontrolü
         if os.path.exists(file_path):
-            new_data.to_csv(file_path, mode='a', header=False, index=False, encoding='utf-8-sig')
-        else:
-            new_data.to_csv(file_path, index=False, encoding='utf-8-sig')
+            with open(file_path, encoding='utf-8-sig') as f:
+                for line in f:
+                    if line.strip().lower().startswith(english.lower() + ","):
+                        return False  # zaten var
+        
+        file_exists = os.path.exists(file_path)
+        with open(file_path, mode='a', encoding='utf-8-sig') as f:
+            if not file_exists:
+                f.write("English,Turkish\n")
+            f.write(f"{english},{turkish}\n")
         return True
     except Exception as e:
         print(f"An error occurred while updating the dictionary: {e}")
+        return False
+    
+def push_glossary_to_remote(commit_msg: str = "Update glossary.csv", glossary_repo_path: str = None):
+    try:
+        repo_path = glossary_repo_path or os.getenv("GLOSSARY_REPO_PATH", ".")
+        repo = GitRepo(repo_path)  
+        src = "glossary.csv"
+        dst = os.path.join(repo_path, "glossary.csv")
+        import shutil
+        shutil.copy2(src, dst)
+        repo.index.add(["glossary.csv"])
+        repo.index.commit(commit_msg)
+        origin = repo.remotes.origin
+        origin.push("main")
+        return True
+    except Exception as e:
+        print(f"Glossary push failed: {e}")
         return False
 
 def git(repo_path, *args):
