@@ -9,12 +9,10 @@ from utils.file_ops import (
     save_translation,
     create_branch,
     push_to_remote,
-    push_new_file_to_branch,
     push_multiple_files_to_branch,
     choose_and_pull_branch,
     load_css,
     get_repo,
-    parse_translation_response,
     open_file_explorer_and_get_path,
     push_glossary_to_remote
 )
@@ -43,7 +41,6 @@ def cached_get_repo(path: str):
 translator = get_translator()
 repo = cached_get_repo(REPO_PATH)
 
-
 with st.sidebar:
     with st.expander("📖 Glossary", expanded=False):
         if os.path.exists("glossary.csv"):
@@ -54,19 +51,38 @@ with st.sidebar:
             )
         else:
             st.caption("No glossary file found yet.")
+
     st.divider()
+
+    with st.expander("➕ Add Term to Glossary", expanded=False):
+        m_eng = st.text_input("English", key="m_eng")
+        m_tr = st.text_input("Turkish", key="m_tr")
+        m_notes = st.text_input("Notes (optional)", key="m_notes")
+        if st.button("Add to Glossary", key="manual_add"):
+            if m_eng and m_tr:
+                added = add_to_glossary(m_eng.strip(), m_tr.strip(), m_notes.strip())
+                if added:
+                    st.toast(f"Added: {m_eng}", icon="💾")
+                    st.rerun()
+                else:
+                    st.warning(f"'{m_eng}' already exists in glossary.")
+            else:
+                st.warning("Fill both fields.")
+
+    st.divider()
+
     commit_msg_glossary = st.text_input(
-        "Glossary commit mesajı",
+        "Glossary commit message",
         value="Update glossary.csv",
         key="glossary_commit_msg"
     )
-    if st.button("☁️ Sync Glossary-Push To cncf-glossary-translator", type="secondary"):
-        with st.spinner("Glossary push ediliyor..."):
+    if st.button("☁️ Sync Glossary — Push To cncf-glossary-translator", type="secondary"):
+        with st.spinner("Pushing glossary..."):
             success = push_glossary_to_remote(commit_msg_glossary)
             if success:
                 st.success("Glossary has been pushed to remote! ✅")
             else:
-                st.error("Push başarısız.")
+                st.error("Push failed.")
 
     editing = st.session_state.get("branch_selected_file")
     if editing:
@@ -87,12 +103,14 @@ st.radio(
     label_visibility="collapsed",
 )
 
+# ──────────────────────────────────────────────
+# FLOW 1 — New Translation
+# ──────────────────────────────────────────────
 if "Flow 1" in st.session_state["active_tab"]:
     st.title("🚀 CNCF Glossary AI Translator")
     st.caption("Enter the GitHub URL, translate it, and develop your dictionary with AI.")
 
     steps = StepManager()
-
     steps.render("Enter GitHub Markdown URL")
 
     url = st.text_input(
@@ -102,16 +120,14 @@ if "Flow 1" in st.session_state["active_tab"]:
     )
 
     if st.button("✨ Translate", type="primary", disabled=not url):
-        with st.spinner("AI does the translation and analyzes the terms...."):
+        with st.spinner("AI is translating..."):
             try:
                 raw = translator.translate(url)
-                main_text, suggestions = parse_translation_response(raw)
                 st.session_state.update(
                     {
-                        "tab1_translation": main_text,
-                        "tab1_suggestions": suggestions,
+                        "tab1_translation": raw,
                         "tab1_filename": translator.get_filename_from_url(url),
-                        "tab1_editor_content": main_text,
+                        "tab1_editor_content": raw,
                     }
                 )
             except Exception as exc:
@@ -121,46 +137,13 @@ if "Flow 1" in st.session_state["active_tab"]:
         st.divider()
         steps.render("Review & Edit Translation")
 
-        left, right = st.columns([3, 1])
-
-        with left:
-            edited_text = st.text_area(
-                "Markdown Editor",
-                value=st.session_state.get("tab1_editor_content", st.session_state["tab1_translation"]),
-                height=500,
-                key="tab1_editor",
-            )
-            st.session_state["tab1_editor_content"] = edited_text
-
-        with right:
-            st.markdown("#### 🤖 AI Terminology")
-
-            with st.expander("➕ Add Term Manually", expanded=False):
-                m_eng = st.text_input("English", key="m_eng")
-                m_tr = st.text_input("Turkish", key="m_tr")
-                if st.button("Add to Glossary", key="manual_add"):
-                    if m_eng and m_tr:
-                        added = add_to_glossary(m_eng.strip(), m_tr.strip())
-                        st.write(f"Sonuç: {added}") 
-                        if added:
-                            st.toast(f"Added: {m_eng}", icon="💾")
-                        else:
-                            st.warning(f"'{m_eng}' already exists in glossary.")
-                    else:
-                        st.warning("Fill both fields.")
-
-            st.divider()
-            suggestions = st.session_state.get("tab1_suggestions", [])
-            if suggestions:
-                st.caption(f"{len(suggestions)} term(s) suggested:")
-                for eng, tr in suggestions:
-                    with st.expander(f"💡 {eng}"):
-                        final_tr = st.text_input("Translation", value=tr, key=f"sug_{eng}")
-                        if st.button("Add to Glossary", key=f"add_{eng}"):
-                            add_to_glossary(eng.strip(), final_tr.strip())
-                            st.toast(f"✅ {eng} added.")
-            else:
-                st.info("No new terms suggested.")
+        edited_text = st.text_area(
+            "Markdown Editor",
+            value=st.session_state.get("tab1_editor_content", st.session_state["tab1_translation"]),
+            height=500,
+            key="tab1_editor",
+        )
+        st.session_state["tab1_editor_content"] = edited_text
 
         st.divider()
         steps.render("Create Branch & Push to Remote")
@@ -198,6 +181,9 @@ if "Flow 1" in st.session_state["active_tab"]:
                 except Exception as exc:
                     st.error(f"Git error: {exc}")
 
+# ──────────────────────────────────────────────
+# FLOW 2 — Edit Existing Branch
+# ──────────────────────────────────────────────
 else:
     st.title("🌿 Edit an Existing Branch")
     st.caption("Switch to a branch, edit or add a file, then commit & push.")
@@ -209,7 +195,6 @@ else:
     local_branches = [h.name for h in repo.heads]
     active_name = repo.active_branch.name
 
-    # Aktif branch'i her render'da session_state'e kaydet
     st.session_state["current_branch"] = active_name
 
     steps = StepManager()
@@ -251,7 +236,6 @@ else:
     )
 
     st.divider()
-    
     steps.render("File")
 
     if "selected_files_dict" not in st.session_state:
@@ -261,15 +245,15 @@ else:
         path = open_file_explorer_and_get_path(REPO_PATH)
         if path:
             rel_path = os.path.relpath(path, REPO_PATH).replace("\\", "/")
-            logger.info(f"rel_path hesaplandı: '{rel_path}', REPO_PATH: '{REPO_PATH}', seçilen path: '{path}'")
+            logger.info(f"rel_path: '{rel_path}', REPO_PATH: '{REPO_PATH}', path: '{path}'")
             if rel_path not in st.session_state["selected_files_dict"]:
                 with open(path, "r", encoding="utf-8") as f:
                     content = f.read()
-                    st.session_state["selected_files_dict"][rel_path] = content
-                    st.toast(f"Listeye eklendi: {rel_path}")
-                    st.rerun()
+                st.session_state["selected_files_dict"][rel_path] = content
+                st.toast(f"Added: {rel_path}")
+                st.rerun()
             else:
-                st.warning("Bu dosya zaten listede ekli.")
+                st.warning("This file is already in the list.")
 
     st.divider()
 
@@ -287,7 +271,8 @@ else:
 
                 new_content = st.text_area(
                     "Contents",
-                    value=st.session_state["selected_files_dict"][file_path],                        height=300,
+                    value=st.session_state["selected_files_dict"][file_path],
+                    height=300,
                     key=f"editor_{file_path}",
                 )
                 st.session_state["selected_files_dict"][file_path] = new_content
@@ -299,24 +284,24 @@ else:
             "Commit Message",
             placeholder="e.g. Fix: update Turkish translation for api-gateway.md",
             key="branch_commit_msg_edit",
-       )
+        )
 
         push_disabled = not commit_msg_edit.strip()
         if push_disabled:
-            st.caption("⚠️ Commit mesajı girin.")
+            st.caption("⚠️ Please enter a commit message.")
 
         if st.button("🚀 Push all changes", type="primary", disabled=push_disabled):
             branch_name = st.session_state.get("current_branch", active_name)
-            with st.spinner(f"'{branch_name}' branch'ine push yapılıyor…"):
+            with st.spinner(f"Pushing to '{branch_name}'…"):
                 try:
                     push_multiple_files_to_branch(
                         REPO_PATH,
                         branch_name,
                         st.session_state["selected_files_dict"],
-                        commit_msg_edit.strip(),                        
-                        )
+                        commit_msg_edit.strip(),
+                    )
                     file_count = len(st.session_state["selected_files_dict"])
-                    st.success(f"{file_count} dosya `{branch_name}` branch'ine başarıyla push edildi! 🎉")
+                    st.success(f"{file_count} file(s) pushed to `{branch_name}` successfully! 🎉")
                     st.balloons()
                 except Exception as exc:
                     st.error(f"Git error: {exc}")

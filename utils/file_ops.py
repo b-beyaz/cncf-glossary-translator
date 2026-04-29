@@ -27,20 +27,18 @@ import os
 
 import csv
 
-def add_to_glossary(english, turkish, file_path="glossary.csv"):
+def add_to_glossary(english, turkish, notes="", file_path="glossary.csv"):
     try:
-        # Duplicate kontrolü
         if os.path.exists(file_path):
             with open(file_path, encoding='utf-8-sig') as f:
                 for line in f:
                     if line.strip().lower().startswith(english.lower() + ","):
-                        return False  # zaten var
-        
+                        return False  
         file_exists = os.path.exists(file_path)
         with open(file_path, mode='a', encoding='utf-8-sig') as f:
             if not file_exists:
-                f.write("English,Turkish\n")
-            f.write(f"{english},{turkish}\n")
+                f.write("English,Turkish,Notes\n")
+            f.write(f"{english},{turkish},{notes}\n")
         return True
     except Exception as e:
         print(f"An error occurred while updating the dictionary: {e}")
@@ -49,15 +47,19 @@ def add_to_glossary(english, turkish, file_path="glossary.csv"):
 def push_glossary_to_remote(commit_msg: str = "Update glossary.csv", glossary_repo_path: str = None):
     try:
         repo_path = glossary_repo_path or os.getenv("GLOSSARY_REPO_PATH", ".")
-        repo = GitRepo(repo_path)  
-        src = "glossary.csv"
-        dst = os.path.join(repo_path, "glossary.csv")
-        import shutil
-        shutil.copy2(src, dst)
+        repo = GitRepo(repo_path)
+
+        repo.git.stash()
+        repo.git.checkout("main")
+
         repo.index.add(["glossary.csv"])
         repo.index.commit(commit_msg)
         origin = repo.remotes.origin
         origin.push("main")
+
+        repo.git.checkout("-")
+        repo.git.stash("pop")
+
         return True
     except Exception as e:
         print(f"Glossary push failed: {e}")
