@@ -15,7 +15,8 @@ from utils.file_ops import (
     load_css,
     get_repo,
     parse_translation_response,
-    open_file_explorer_and_get_path
+    open_file_explorer_and_get_path,
+    push_glossary_to_remote
 )
 import logging
 
@@ -47,24 +48,46 @@ with st.sidebar:
     with st.expander("📖 Glossary", expanded=False):
         if os.path.exists("glossary.csv"):
             st.dataframe(
-                pd.read_csv("glossary.csv"),
+                pd.read_csv("glossary.csv", on_bad_lines='skip'),
                 use_container_width=True,
                 hide_index=True,
             )
         else:
             st.caption("No glossary file found yet.")
     st.divider()
+    commit_msg_glossary = st.text_input(
+        "Glossary commit mesajı",
+        value="Update glossary.csv",
+        key="glossary_commit_msg"
+    )
+    if st.button("☁️ Sync Glossary-Push To cncf-glossary-translator", type="secondary"):
+        with st.spinner("Glossary push ediliyor..."):
+            success = push_glossary_to_remote(commit_msg_glossary)
+            if success:
+                st.success("Glossary has been pushed to remote! ✅")
+            else:
+                st.error("Push başarısız.")
 
     editing = st.session_state.get("branch_selected_file")
     if editing:
         st.divider()
         st.caption(f"🖊 Editing: `{editing}`")
 
-tab_translate, tab_branch = st.tabs(
-    ["🌐 Flow 1 — New Translation", "🌿 Flow 2 — Edit Existing Branch"]
+if "active_tab" not in st.session_state:
+    st.session_state["active_tab"] = "🌐 Flow 1 — New Translation"
+
+options = ["🌐 Flow 1 — New Translation", "🌿 Flow 2 — Edit Existing Branch"]
+
+st.radio(
+    "Navigation",
+    options=options,
+    index=options.index(st.session_state["active_tab"]) if st.session_state["active_tab"] in options else 0,
+    key="active_tab",
+    horizontal=True,
+    label_visibility="collapsed",
 )
 
-with tab_translate:
+if "Flow 1" in st.session_state["active_tab"]:
     st.title("🚀 CNCF Glossary AI Translator")
     st.caption("Enter the GitHub URL, translate it, and develop your dictionary with AI.")
 
@@ -117,8 +140,12 @@ with tab_translate:
                 m_tr = st.text_input("Turkish", key="m_tr")
                 if st.button("Add to Glossary", key="manual_add"):
                     if m_eng and m_tr:
-                        add_to_glossary(m_eng.strip(), m_tr.strip())
-                        st.toast(f"Added: {m_eng}", icon="💾")
+                        added = add_to_glossary(m_eng.strip(), m_tr.strip())
+                        st.write(f"Sonuç: {added}") 
+                        if added:
+                            st.toast(f"Added: {m_eng}", icon="💾")
+                        else:
+                            st.warning(f"'{m_eng}' already exists in glossary.")
                     else:
                         st.warning("Fill both fields.")
 
@@ -171,7 +198,7 @@ with tab_translate:
                 except Exception as exc:
                     st.error(f"Git error: {exc}")
 
-with tab_branch:
+else:
     st.title("🌿 Edit an Existing Branch")
     st.caption("Switch to a branch, edit or add a file, then commit & push.")
 
@@ -224,146 +251,74 @@ with tab_branch:
     )
 
     st.divider()
-    steps.render("What do you want to do?")
-
-    mode = st.radio(
-        "İşlem tipi",
-        options=["✏️ Edit existing file", "➕ Add new file"],
-        key="branch_mode",
-        label_visibility="collapsed",
-        horizontal=True,
-    )
-
-    st.divider()
+    
     steps.render("File")
 
-    if mode == "✏️ Edit existing file":
-        if "selected_files_dict" not in st.session_state:
-            st.session_state["selected_files_dict"] = {}
+    if "selected_files_dict" not in st.session_state:
+        st.session_state["selected_files_dict"] = {}
 
-        if st.button("📁 Bilgisayarımdan Dosya Ekle"):
-            path = open_file_explorer_and_get_path(REPO_PATH)
-            if path:
-                rel_path = os.path.relpath(path, REPO_PATH).replace("\\", "/")
-                logger.info(f"rel_path hesaplandı: '{rel_path}', REPO_PATH: '{REPO_PATH}', seçilen path: '{path}'")
-                if rel_path not in st.session_state["selected_files_dict"]:
-                    with open(path, "r", encoding="utf-8") as f:
-                        content = f.read()
+    if st.button("📁 Add File From My Computer"):
+        path = open_file_explorer_and_get_path(REPO_PATH)
+        if path:
+            rel_path = os.path.relpath(path, REPO_PATH).replace("\\", "/")
+            logger.info(f"rel_path hesaplandı: '{rel_path}', REPO_PATH: '{REPO_PATH}', seçilen path: '{path}'")
+            if rel_path not in st.session_state["selected_files_dict"]:
+                with open(path, "r", encoding="utf-8") as f:
+                    content = f.read()
                     st.session_state["selected_files_dict"][rel_path] = content
                     st.toast(f"Listeye eklendi: {rel_path}")
                     st.rerun()
-                else:
-                    st.warning("Bu dosya zaten listede ekli.")
+            else:
+                st.warning("Bu dosya zaten listede ekli.")
 
-        st.divider()
+    st.divider()
 
-        if st.session_state["selected_files_dict"]:
-            st.subheader("📝 Seçili Dosyaları Düzenle")
+    if st.session_state["selected_files_dict"]:
+        st.subheader("📝 Edit Selected Files")
 
-            for file_path in list(st.session_state["selected_files_dict"].keys()):
-                with st.container(border=True):
-                    col_title, col_del = st.columns([0.9, 0.1])
-                    col_title.markdown(f"**📄 {file_path}**")
+        for file_path in list(st.session_state["selected_files_dict"].keys()):
+            with st.container(border=True):
+                col_title, col_del = st.columns([0.9, 0.1])
+                col_title.markdown(f"**📄 {file_path}**")
 
-                    if col_del.button("❌", key=f"del_{file_path}"):
-                        del st.session_state["selected_files_dict"][file_path]
-                        st.rerun()
+                if col_del.button("❌", key=f"del_{file_path}"):
+                    del st.session_state["selected_files_dict"][file_path]
+                    st.rerun()
 
-                    new_content = st.text_area(
-                        "İçerik",
-                        value=st.session_state["selected_files_dict"][file_path],
-                        height=300,
-                        key=f"editor_{file_path}",
-                    )
-                    st.session_state["selected_files_dict"][file_path] = new_content
-
-            st.divider()
-            steps.render("Commit & Push")
-
-            commit_msg_edit = st.text_input(
-                "Commit Message",
-                placeholder="e.g. Fix: update Turkish translation for api-gateway.md",
-                key="branch_commit_msg_edit",
-            )
-
-            push_disabled = not commit_msg_edit.strip()
-            if push_disabled:
-                st.caption("⚠️ Commit mesajı girin.")
-
-            if st.button("🚀 Tüm Değişiklikleri Pushla", type="primary", disabled=push_disabled):
-                branch_name = st.session_state.get("current_branch", active_name)
-                with st.spinner(f"'{branch_name}' branch'ine push yapılıyor…"):
-                    try:
-                        # Tüm dosyalar tek commit + tek push ile gönderiliyor
-                        push_multiple_files_to_branch(
-                            REPO_PATH,
-                            branch_name,
-                            st.session_state["selected_files_dict"],
-                            commit_msg_edit.strip(),
-                        )
-                        file_count = len(st.session_state["selected_files_dict"])
-                        st.success(f"{file_count} dosya `{branch_name}` branch'ine başarıyla push edildi! 🎉")
-                        st.balloons()
-                    except Exception as exc:
-                        st.error(f"Git error: {exc}")
-        else:
-            st.info("Henüz dosya seçilmedi. Yukarıdaki butonu kullanarak dosya ekleyin.")
-
-    else:
-        # ➕ Add new file modu
-        new_file_path = st.text_input(
-            "File path",
-            placeholder="content/tr/my-new-term.md",
-            key="branch_new_filepath",
-        )
-        target_filepath = new_file_path.strip() if new_file_path else None
-
-        if "branch_editor_content" not in st.session_state:
-            st.session_state["branch_editor_content"] = ""
-
-        st.divider()
-        steps.render("Edit Content")
-
-        branch_content = st.text_area(
-            "File Content",
-            value=st.session_state.get("branch_editor_content", ""),
-            height=500,
-            key="branch_editor",
-            disabled=(not target_filepath),
-            placeholder="" if target_filepath else "First specify a file path above.",
-        )
-        if target_filepath:
-            st.session_state["branch_editor_content"] = branch_content
+                new_content = st.text_area(
+                    "Contents",
+                    value=st.session_state["selected_files_dict"][file_path],                        height=300,
+                    key=f"editor_{file_path}",
+                )
+                st.session_state["selected_files_dict"][file_path] = new_content
 
         st.divider()
         steps.render("Commit & Push")
 
-        commit_msg_branch = st.text_input(
+        commit_msg_edit = st.text_input(
             "Commit Message",
-            placeholder="e.g. Add: new Turkish translation for my-new-term.md",
-            key="branch_commit_msg",
-        )
+            placeholder="e.g. Fix: update Turkish translation for api-gateway.md",
+            key="branch_commit_msg_edit",
+       )
 
-        can_push = bool(target_filepath and commit_msg_branch.strip())
+        push_disabled = not commit_msg_edit.strip()
+        if push_disabled:
+            st.caption("⚠️ Commit mesajı girin.")
 
-        if not can_push:
-            if not target_filepath:
-                st.caption("⚠️ Dosya yolunu girin.")
-            elif not commit_msg_branch.strip():
-                st.caption("⚠️ Commit mesajı girin.")
-
-        if st.button("🚀 Push to Remote", type="primary", disabled=not can_push):
+        if st.button("🚀 Push all changes", type="primary", disabled=push_disabled):
             branch_name = st.session_state.get("current_branch", active_name)
             with st.spinner(f"'{branch_name}' branch'ine push yapılıyor…"):
                 try:
-                    push_new_file_to_branch(
+                    push_multiple_files_to_branch(
                         REPO_PATH,
                         branch_name,
-                        target_filepath,
-                        st.session_state.get("branch_editor_content", ""),
-                        commit_msg_branch.strip(),
-                    )
-                    st.success(f"`{target_filepath}` dosyası `{branch_name}` branch'ine push edildi! 🎉")
+                        st.session_state["selected_files_dict"],
+                        commit_msg_edit.strip(),                        
+                        )
+                    file_count = len(st.session_state["selected_files_dict"])
+                    st.success(f"{file_count} dosya `{branch_name}` branch'ine başarıyla push edildi! 🎉")
                     st.balloons()
                 except Exception as exc:
                     st.error(f"Git error: {exc}")
+    else:
+        st.info("No files have been selected yet. Add a file using the button above.")
