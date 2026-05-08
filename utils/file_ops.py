@@ -264,19 +264,8 @@ def render_file_explorer(tree, current_path=""):
                             st.session_state["branch_editor_content"] = f.read()
                         st.toast(f"File uploaded: {name}")
                         st.rerun()
-def open_file_explorer_and_get_path(initial_dir="/mnt/c/glossary"):
-    root = tk.Tk()
-    root.withdraw()
-    root.attributes('-topmost', True)
-
-    file_path = filedialog.askopenfilename(
-        initialdir=initial_dir,
-        title="Select the file you want to edit.",
-        filetypes=[("All Files", "*.*")] 
-    )
-    
-    root.destroy()
-    return file_path
+def open_file_explorer_and_get_path(initial_dir=""):
+    return None  
 
 def push_multiple_files_to_branch(REPO_PATH, branch, files_dict, commit_msg):
     repo_name = "glossary"
