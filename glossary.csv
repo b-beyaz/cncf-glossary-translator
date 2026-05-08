@@ -173,4 +173,7 @@ Security Posture,Güvenlik Duruşu,
 Silo,Silo,
 Security Mishaps,Güvenlik Açıklıkları,
 Handoff,Aktarım / İş Aktarımı,
-architecture,mimari,
+Architecture,Mimari,
+Edge Device,Uç Cihaz,auto-suggested
+Real-time data processing,Gerçek zamanlı veri işleme,auto-suggested
+Abstraction,Soyutlama,auto-suggested
