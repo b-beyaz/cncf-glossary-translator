@@ -15,12 +15,14 @@ from utils.file_ops import (
     push_multiple_files_to_branch,
     push_to_remote,
     save_translation,
+    configure_git
 )
 from utils.logger import logger
 from utils.translator import CNCFTranslator
 from utils.ui_components import StepManager, render_file_uploader
 
 load_dotenv()
+configure_git()
 
 logger.info("App starting...")
 
