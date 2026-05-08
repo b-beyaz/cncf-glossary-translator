@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  streamlit-app:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ~/.ssh:/root/.ssh:ro
+      - /mnt/c/glossarry-turkish:/app/glossarry-turkish  
+      - /mnt/c/glossary:/app/glossary    
+      - ./logs:/app/logs
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - BASE_BRANCH=${BASE_BRANCH}
+      - REPO_PATH=${REPO_PATH}
+      - OUTPUT_DIR=${OUTPUT_DIR}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_USER=${GITHUB_USER}
+      - GITHUB_REPO=${GITHUB_REPO}
+      - GLOSSARY_REPO_PATH=${GLOSSARY_REPO_PATH}
+      - MODEL_NAME=${MODEL_NAME}

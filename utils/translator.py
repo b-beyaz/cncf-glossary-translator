@@ -5,6 +5,7 @@ import anthropic
 from dotenv import load_dotenv
 from urllib.parse import urlparse
 from utils.file_ops import read_glossary
+from utils.logger import logger
 
 load_dotenv()
 
@@ -33,12 +34,12 @@ class CNCFTranslator:
                     "Authentication required: Set either ANTHROPIC_API_KEY "
                     "or ANTHROPIC_VERTEX_PROJECT_ID environment variable"
                 )
-            print("Initializing with direct Anthropic API")
+            logger.info("Initializing with direct Anthropic API")
             self.client = anthropic.Anthropic(api_key=self.api_key)
             # Default model for Direct API
             self.model = os.getenv("MODEL_NAME", "claude-sonnet-4-20250514")
 
-        print(f"Using model: {self.model}")
+        logger.info(f"Using model: {self.model}")
 
 
     def get_raw_url(self, url):
@@ -53,6 +54,7 @@ class CNCFTranslator:
         content_res = requests.get(raw_url)
         
         if content_res.status_code != 200:
+            logger.error(f"Source file could not be reached. (Code: {content_res.status_code})")
             return f"Error: Source file could not be reached. (Code:{content_res.status_code})"
 
         source_text = content_res.text
@@ -110,9 +112,23 @@ class CNCFTranslator:
                 system=system_msg,
                 messages=[{"role": "user", "content": source_text}]
             )
-            return response.content[0].text
+            full_response = response.content[0].text
+            logger.debug(f"Response son 300 karakter:\n{full_response[-300:]}")
+
+            if "SUGGESTIONS:" in full_response:
+                parts = full_response.split("SUGGESTIONS:", 1)
+                translation = parts[0].strip()
+                suggestions_raw = parts[1].strip()
+                logger.info("Suggestions found.")
+            else:
+                translation = full_response.strip()
+                suggestions_raw = ""
+                logger.warning("No suggestions found in response.")
+            
+            return translation, suggestions_raw    
         except Exception as e:
-            return f"API Hatası: {e}"
+            logger.error(f"API Error: {e}")
+            return f"API Error: {e}", "" 
     
 if __name__ == "__main__":
     translator = CNCFTranslator()
@@ -122,11 +138,12 @@ if __name__ == "__main__":
     if not filename.endswith(".md"):
         filename = "translated_output.md"
 
-    print(f"The process has started... Target file: {filename}")
-    output = translator.translate(target_url)
-    
+    logger.info(f"Translation started. Target file: {filename}")
+    translation, suggestions = translator.translate(target_url)
+ 
     with open(filename, "w", encoding="utf-8") as f:
-        f.write(output)
-    
-    print(f"\n--- TRANSLATION COMPLETE ---")
-    print(f"The result was saved to the file '{filename}'.")
+        f.write(translation)
+ 
+    logger.info(f"Translation complete. Saved to '{filename}'.")
+    if suggestions:
+        logger.info(f"Suggestions:\n{suggestions}")

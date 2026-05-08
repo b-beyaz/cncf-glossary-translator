@@ -1,27 +1,28 @@
+import io
 import os
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
-from utils.ui_components import StepManager
-from utils.translator import CNCFTranslator
+
 from utils.file_ops import (
     add_to_glossary,
-    save_translation,
-    create_branch,
-    push_to_remote,
-    push_multiple_files_to_branch,
     choose_and_pull_branch,
-    load_css,
+    create_branch,
     get_repo,
+    load_css,
     open_file_explorer_and_get_path,
-    push_glossary_to_remote
+    push_glossary_to_remote,
+    push_multiple_files_to_branch,
+    push_to_remote,
+    save_translation,
 )
-import logging
+from utils.logger import logger
+from utils.translator import CNCFTranslator
+from utils.ui_components import StepManager, render_file_uploader
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+logger.info("App starting...")
 
 st.set_page_config(page_title="CNCF Glossary AI Suite", layout="wide", initial_sidebar_state="expanded")
 
@@ -30,27 +31,98 @@ BASE_BRANCH = os.getenv("BASE_BRANCH", "dev-tr")
 
 load_css("styles/main.css")
 
+
 @st.cache_resource
 def get_translator():
     return CNCFTranslator()
+
 
 @st.cache_resource
 def cached_get_repo(path: str):
     return get_repo(path)
 
-translator = get_translator()
-repo = cached_get_repo(REPO_PATH)
 
+translator = get_translator()
+
+try:
+    repo = cached_get_repo(REPO_PATH)
+except Exception as e:
+    logger.error(f"Repo açılamadı: {e}")
+    repo = None
+
+# ──────────────────────────────────────────────
+# SIDEBAR
+# ──────────────────────────────────────────────
 with st.sidebar:
     with st.expander("📖 Glossary", expanded=False):
         if os.path.exists("glossary.csv"):
             st.dataframe(
-                pd.read_csv("glossary.csv", on_bad_lines='skip'),
+                pd.read_csv("glossary.csv", on_bad_lines="skip"),
                 use_container_width=True,
                 hide_index=True,
             )
         else:
+            logger.warning("No glossary file found.")
             st.caption("No glossary file found yet.")
+
+        if st.session_state.get("tab1_suggestions"):
+            st.divider()
+            st.subheader("💡 Proposed New Terms")
+            st.caption("Edit and select terms to add to the dictionary:")
+
+            raw = st.session_state["tab1_suggestions"].strip()
+
+            # İlk satır başlık mı değil mi kontrol et
+            if not raw.startswith("English Term"):
+                raw = "English Term,Recommended Turkish Translation\n" + raw
+
+            suggestions_csv = raw
+            try:
+                df_suggestions = pd.read_csv(io.StringIO(suggestions_csv))
+            except Exception as e:
+                logger.error(f"Suggestions parse error: {e}")
+                df_suggestions = pd.DataFrame()
+
+            if not df_suggestions.empty:
+                df_edit = df_suggestions.copy()
+                df_edit.insert(0, "Add", False)
+
+                edited_df = st.data_editor(
+                    df_edit,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Add": st.column_config.CheckboxColumn(width="small"),
+                        "English Term": st.column_config.TextColumn(width="medium"),
+                        "Recommended Turkish Translation": st.column_config.TextColumn(
+                            label="Turkish Translation",
+                            width="medium",
+                        ),
+                    },
+                )
+
+                selected = edited_df[edited_df["Add"] == True]
+
+                col_add, col_clear = st.columns(2)
+                with col_add:
+                    if st.button("✅ Add Selected", disabled=selected.empty):
+                        for _, row in selected.iterrows():
+                            added = add_to_glossary(
+                                row["English Term"],
+                                row["Recommended Turkish Translation"],
+                                "auto-suggested",
+                            )
+                            if added:
+                                logger.info(f"Added: {row['English Term']}")
+                            else:
+                                logger.warning(f"Already exists: {row['English Term']}")
+                        st.toast(f"{len(selected)} term(s) added!", icon="✅")
+                        st.rerun()
+
+                with col_clear:
+                    if st.button("🗑️ Clear"):
+                        st.session_state.pop("tab1_suggestions", None)
+                        st.rerun()
 
     st.divider()
 
@@ -62,26 +134,31 @@ with st.sidebar:
             if m_eng and m_tr:
                 added = add_to_glossary(m_eng.strip(), m_tr.strip(), m_notes.strip())
                 if added:
+                    logger.info(f"Added: {m_eng}")
                     st.toast(f"Added: {m_eng}", icon="💾")
                     st.rerun()
                 else:
+                    logger.warning(f"'{m_eng}' already exists in glossary.")
                     st.warning(f"'{m_eng}' already exists in glossary.")
             else:
                 st.warning("Fill both fields.")
+                logger.warning("Fill both fields.")
 
     st.divider()
 
     commit_msg_glossary = st.text_input(
         "Glossary commit message",
         value="Update glossary.csv",
-        key="glossary_commit_msg"
+        key="glossary_commit_msg",
     )
     if st.button("☁️ Sync Glossary — Push To cncf-glossary-translator", type="secondary"):
         with st.spinner("Pushing glossary..."):
             success = push_glossary_to_remote(commit_msg_glossary)
             if success:
+                logger.info("Glossary pushed to remote.")
                 st.success("Glossary has been pushed to remote! ✅")
             else:
+                logger.error("Push failed.")
                 st.error("Push failed.")
 
     editing = st.session_state.get("branch_selected_file")
@@ -89,6 +166,9 @@ with st.sidebar:
         st.divider()
         st.caption(f"🖊 Editing: `{editing}`")
 
+# ──────────────────────────────────────────────
+# NAVIGATION
+# ──────────────────────────────────────────────
 if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = "🌐 Flow 1 — New Translation"
 
@@ -97,7 +177,9 @@ options = ["🌐 Flow 1 — New Translation", "🌿 Flow 2 — Edit Existing Bra
 st.radio(
     "Navigation",
     options=options,
-    index=options.index(st.session_state["active_tab"]) if st.session_state["active_tab"] in options else 0,
+    index=options.index(st.session_state["active_tab"])
+    if st.session_state["active_tab"] in options
+    else 0,
     key="active_tab",
     horizontal=True,
     label_visibility="collapsed",
@@ -122,15 +204,18 @@ if "Flow 1" in st.session_state["active_tab"]:
     if st.button("✨ Translate", type="primary", disabled=not url):
         with st.spinner("AI is translating..."):
             try:
-                raw = translator.translate(url)
+                translation, suggestions = translator.translate(url)
                 st.session_state.update(
                     {
-                        "tab1_translation": raw,
+                        "tab1_translation": translation,
                         "tab1_filename": translator.get_filename_from_url(url),
-                        "tab1_editor_content": raw,
+                        "tab1_editor_content": translation,
+                        "tab1_suggestions": suggestions,
                     }
                 )
+                logger.info(f"Translation complete. Suggestions found: {bool(suggestions)}")
             except Exception as exc:
+                logger.error(f"Translation failed: {exc}")
                 st.error(f"Translation failed: {exc}")
 
     if "tab1_translation" in st.session_state:
@@ -139,7 +224,9 @@ if "Flow 1" in st.session_state["active_tab"]:
 
         edited_text = st.text_area(
             "Markdown Editor",
-            value=st.session_state.get("tab1_editor_content", st.session_state["tab1_translation"]),
+            value=st.session_state.get(
+                "tab1_editor_content", st.session_state["tab1_translation"]
+            ),
             height=500,
             key="tab1_editor",
         )
@@ -174,11 +261,14 @@ if "Flow 1" in st.session_state["active_tab"]:
                         commit=commit_msg,
                     )
                     if success:
+                        logger.info(f"Pushed to branch: {branch_name}")
                         st.success(f"Pushed to GitHub on branch `{branch_name}`! 🎉")
                         st.balloons()
                     else:
+                        logger.error("Push failed.")
                         st.error("Push failed. Check your Git credentials or PAT.")
                 except Exception as exc:
+                    logger.error(f"Git error: {exc}")
                     st.error(f"Git error: {exc}")
 
 # ──────────────────────────────────────────────
@@ -189,12 +279,12 @@ else:
     st.caption("Switch to a branch, edit or add a file, then commit & push.")
 
     if not repo:
+        logger.error(f"Cannot open Git repo at {REPO_PATH}")
         st.error(f"Cannot open Git repository at `{REPO_PATH}`. Check your REPO_PATH env variable.")
         st.stop()
 
     local_branches = [h.name for h in repo.heads]
     active_name = repo.active_branch.name
-
     st.session_state["current_branch"] = active_name
 
     steps = StepManager()
@@ -223,12 +313,19 @@ else:
             try:
                 choose_and_pull_branch(REPO_PATH, selected_branch)
                 cached_get_repo.clear()
-                for key in ("branch_selected_file", "branch_editor_content", "branch_mode", "selected_files_dict"):
+                for key in (
+                    "branch_selected_file",
+                    "branch_editor_content",
+                    "branch_mode",
+                    "selected_files_dict",
+                ):
                     st.session_state.pop(key, None)
+                logger.info(f"Switched to branch: {selected_branch}")
                 st.success(f"Now on branch `{selected_branch}`.")
                 st.rerun()
             except Exception as exc:
-                st.error(f"Git error: {str(exc)}")
+                logger.error(f"Git error: {exc}")
+                st.error(f"Git error: {exc}")
 
     st.markdown(
         f'Current branch: <span class="badge badge-green">⎇ {active_name}</span>',
@@ -241,19 +338,9 @@ else:
     if "selected_files_dict" not in st.session_state:
         st.session_state["selected_files_dict"] = {}
 
-    if st.button("📁 Add File From My Computer"):
-        path = open_file_explorer_and_get_path(REPO_PATH)
-        if path:
-            rel_path = os.path.relpath(path, REPO_PATH).replace("\\", "/")
-            logger.info(f"rel_path: '{rel_path}', REPO_PATH: '{REPO_PATH}', path: '{path}'")
-            if rel_path not in st.session_state["selected_files_dict"]:
-                with open(path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                st.session_state["selected_files_dict"][rel_path] = content
-                st.toast(f"Added: {rel_path}")
-                st.rerun()
-            else:
-                st.warning("This file is already in the list.")
+    st.session_state["selected_files_dict"] = render_file_uploader(
+    st.session_state["selected_files_dict"]
+    )
 
     st.divider()
 
@@ -301,9 +388,11 @@ else:
                         commit_msg_edit.strip(),
                     )
                     file_count = len(st.session_state["selected_files_dict"])
+                    logger.info(f"{file_count} file(s) pushed to {branch_name}")
                     st.success(f"{file_count} file(s) pushed to `{branch_name}` successfully! 🎉")
                     st.balloons()
                 except Exception as exc:
+                    logger.error(f"Git error: {exc}")
                     st.error(f"Git error: {exc}")
     else:
         st.info("No files have been selected yet. Add a file using the button above.")
