@@ -7,9 +7,9 @@ services:
       - "8501:8501"
     volumes:
       - ~/.ssh:/root/.ssh:ro
-      - /mnt/c/glossarry-turkish:/app/glossarry-turkish  
       - /mnt/c/glossary:/app/glossary    
       - ./logs:/app/logs
+      - .:/app
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - BASE_BRANCH=${BASE_BRANCH}
