@@ -14,8 +14,8 @@ load_dotenv(override=True)
 REPO_PATH = os.getenv("REPO_PATH", ".")
 BASE_BRANCH = os.getenv("BASE_BRANCH", "dev-tr")
 OUTPUT_DIR = os.getenv("OUTPUT_DIR")
-curr_token = os.getenv("GITHUB_TOKEN")
-curr_user = os.getenv("GITHUB_USER")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_NAME = os.getenv("GITHUB_NAME")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -26,6 +26,12 @@ import os
 import os
 
 import csv
+
+def configure_git():
+    email = os.getenv("GITHUB_EMAIL")
+    name = os.getenv("GITHUB_NAME")
+    subprocess.run(["git", "config", "--global", "user.email", email])
+    subprocess.run(["git", "config", "--global", "user.name", name])
 
 def add_to_glossary(english, turkish, notes="", file_path="glossary.csv"):
     try:
@@ -95,13 +101,22 @@ def create_branch(REPO_PATH, BASE_BRANCH, new_branch):
 def push_to_remote(REPO_PATH, new_branch, filename, commit):
     repo_name = "glossary"
     try:
-        authenticated_url = f"https://{curr_token}@github.com/{curr_user}/{repo_name}.git"
+        authenticated_url = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_NAME}/{repo_name}.git"
+        output_dir = os.getenv("OUTPUT_DIR", "")
+        rel_path = os.path.relpath(
+            os.path.join(output_dir, filename),
+            REPO_PATH
+        )
+        logger.info(f"git add path: {rel_path}")
         git(REPO_PATH, "checkout", new_branch)
-        git(REPO_PATH, "add", filename) 
+        git(REPO_PATH, "add", rel_path)
         try:
             git(REPO_PATH, "commit", "--signoff", "-m", commit)
-        except:
-            print("No changes were found to commit.")
+        except Exception as e:
+            if "nothing to commit" in str(e).lower():
+                logger.info("Nothing to commit.")
+            else:
+                raise
         git(REPO_PATH, "push", authenticated_url, new_branch, "--force")
         return True
     except Exception as e:
@@ -110,7 +125,7 @@ def push_to_remote(REPO_PATH, new_branch, filename, commit):
 def push_new_file_to_branch(REPO_PATH, branch, filepath, content, commit_msg):
     repo_name = "glossary"
     try:
-        authenticated_url = f"https://{curr_token}@github.com/{curr_user}/{repo_name}.git"
+        authenticated_url = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_NAME}/{repo_name}.git"
         git(REPO_PATH, "checkout", branch)
         abs_path = os.path.join(REPO_PATH, filepath)
         os.makedirs(os.path.dirname(abs_path), exist_ok=True)
@@ -277,7 +292,7 @@ def open_file_explorer_and_get_path(initial_dir=""):
 def push_multiple_files_to_branch(REPO_PATH, branch, files_dict, commit_msg):
     repo_name = "glossary"
     try:
-        authenticated_url = f"https://{curr_token}@github.com/{curr_user}/{repo_name}.git"
+        authenticated_url = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_NAME}/{repo_name}.git"
         git(REPO_PATH, "checkout", branch)
         for filepath, content in files_dict.items():
             logger.info(f"filepath value: '{filepath}'")
