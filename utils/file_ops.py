@@ -47,19 +47,26 @@ def add_to_glossary(english, turkish, notes="", file_path="glossary.csv"):
 def push_glossary_to_remote(commit_msg: str = "Update glossary.csv", glossary_repo_path: str = None):
     try:
         repo_path = glossary_repo_path or os.getenv("GLOSSARY_REPO_PATH", ".")
-        repo = GitRepo(repo_path)
+        logger.info(f"Glossary repo path: {repo_path}")
 
-        repo.git.stash()
-        repo.git.checkout("main")
+        repo = GitRepo(repo_path)
+        logger.info(f"Active branch: {repo.active_branch.name}")
+        
+        glossary_full_path = os.path.join(repo_path, "glossary.csv")
+        logger.info(f"glossary.csv exists: {os.path.exists(glossary_full_path)}")
 
         repo.index.add(["glossary.csv"])
+       
+        if not repo.index.diff("HEAD"):
+            logger.warning("glossary.csv değişmemiş, commit yok.")
+            return False
+        
         repo.index.commit(commit_msg)
+        logger.info("Commit yapıldı.")
+        
         origin = repo.remotes.origin
-        origin.push("main")
-
-        repo.git.checkout("-")
-        repo.git.stash("pop")
-
+        push_result = origin.push()
+        logger.info(f"Push result: {push_result[0].summary}")
         return True
     except Exception as e:
         print(f"Glossary push failed: {e}")

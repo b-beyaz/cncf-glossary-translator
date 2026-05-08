@@ -54,7 +54,7 @@ except Exception as e:
 # SIDEBAR
 # ──────────────────────────────────────────────
 with st.sidebar:
-    with st.expander("📖 Glossary", expanded=False):
+    with st.expander("📖 Glossary", expanded=True):
         if os.path.exists("glossary.csv"):
             st.dataframe(
                 pd.read_csv("glossary.csv", on_bad_lines="skip"),
@@ -72,7 +72,6 @@ with st.sidebar:
 
             raw = st.session_state["tab1_suggestions"].strip()
 
-            # İlk satır başlık mı değil mi kontrol et
             if not raw.startswith("English Term"):
                 raw = "English Term,Recommended Turkish Translation\n" + raw
 
@@ -213,7 +212,8 @@ if "Flow 1" in st.session_state["active_tab"]:
                         "tab1_suggestions": suggestions,
                     }
                 )
-                logger.info(f"Translation complete. Suggestions found: {bool(suggestions)}")
+                logger.info(f"Suggestions session_state'e yazıldı: '{suggestions[:100] if suggestions else 'NONE'}'")
+                st.rerun() 
             except Exception as exc:
                 logger.error(f"Translation failed: {exc}")
                 st.error(f"Translation failed: {exc}")
@@ -339,7 +339,7 @@ else:
         st.session_state["selected_files_dict"] = {}
 
     st.session_state["selected_files_dict"] = render_file_uploader(
-    st.session_state["selected_files_dict"]
+        st.session_state["selected_files_dict"]
     )
 
     st.divider()
