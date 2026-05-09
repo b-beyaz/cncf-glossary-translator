@@ -13,6 +13,8 @@ RUN git config --global --add safe.directory '*'
 RUN git config --global user.email "${GITHUB_EMAIL}" && \
     git config --global user.name "${GITHUB_NAME}"
 
+RUN git config --global credential.helper store
+
 COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt

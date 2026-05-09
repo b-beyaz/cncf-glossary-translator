@@ -6,8 +6,6 @@ import logging
 import streamlit as st
 from dotenv import load_dotenv
 from git import Repo as GitRepo, InvalidGitRepositoryError
-import tkinter as tk
-from tkinter import filedialog
 
 load_dotenv(override=True)
 
@@ -16,22 +14,19 @@ BASE_BRANCH = os.getenv("BASE_BRANCH", "dev-tr")
 OUTPUT_DIR = os.getenv("OUTPUT_DIR")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_NAME = os.getenv("GITHUB_NAME")
+GITHUB_USER = os.getenv("GITHUB_USER")
+GITHUB_EMAIL = os.getenv("GITHUB_EMAIL")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-
-import os
-
-import os
-
-import csv
-
 def configure_git():
-    email = os.getenv("GITHUB_EMAIL")
-    name = os.getenv("GITHUB_NAME")
-    subprocess.run(["git", "config", "--global", "user.email", email])
-    subprocess.run(["git", "config", "--global", "user.name", name])
+    subprocess.run(["git", "config", "--global", "user.email", GITHUB_EMAIL])
+    subprocess.run(["git", "config", "--global", "user.name", GITHUB_NAME])
+    credentials = f"https://{GITHUB_USER}:{GITHUB_TOKEN}@github.com"
+    with open(os.path.expanduser("~/.git-credentials"), "w") as f:
+        f.write(credentials)
+configure_git()
 
 def add_to_glossary(english, turkish, notes="", file_path="glossary.csv"):
     try:
@@ -101,8 +96,11 @@ def create_branch(REPO_PATH, BASE_BRANCH, new_branch):
 def push_to_remote(REPO_PATH, new_branch, filename, commit):
     repo_name = "glossary"
     try:
-        authenticated_url = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_NAME}/{repo_name}.git"
+        remote_url = f"https://github.com/{GITHUB_NAME}/{repo_name}.git"
         output_dir = os.getenv("OUTPUT_DIR", "")
+        logger.info(f"REPO_PATH: {REPO_PATH}")
+        logger.info(f"OUTPUT_DIR: {output_dir}")
+        logger.info(f"filename: {filename}")
         rel_path = os.path.relpath(
             os.path.join(output_dir, filename),
             REPO_PATH
@@ -117,7 +115,7 @@ def push_to_remote(REPO_PATH, new_branch, filename, commit):
                 logger.info("Nothing to commit.")
             else:
                 raise
-        git(REPO_PATH, "push", authenticated_url, new_branch, "--force")
+        git(REPO_PATH, "push", remote_url , new_branch, "--force")
         return True
     except Exception as e:
         raise Exception(f"Git Push Error: {str(e)}")
@@ -125,7 +123,7 @@ def push_to_remote(REPO_PATH, new_branch, filename, commit):
 def push_new_file_to_branch(REPO_PATH, branch, filepath, content, commit_msg):
     repo_name = "glossary"
     try:
-        authenticated_url = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_NAME}/{repo_name}.git"
+        remote_url = f"https://github.com/{GITHUB_NAME}/{repo_name}.git"
         git(REPO_PATH, "checkout", branch)
         abs_path = os.path.join(REPO_PATH, filepath)
         os.makedirs(os.path.dirname(abs_path), exist_ok=True)
@@ -142,7 +140,7 @@ def push_new_file_to_branch(REPO_PATH, branch, filepath, content, commit_msg):
                 logger.info("Commit skipped: no staged changes.")
             else:
                 raise
-        git(REPO_PATH, "push", authenticated_url, branch)
+        git(REPO_PATH, "push", remote_url, branch)
         logger.info(f"Push successful → branch: {branch}")
         return True
     except Exception as e:
@@ -292,7 +290,7 @@ def open_file_explorer_and_get_path(initial_dir=""):
 def push_multiple_files_to_branch(REPO_PATH, branch, files_dict, commit_msg):
     repo_name = "glossary"
     try:
-        authenticated_url = f"https://{GITHUB_TOKEN}@github.com/{GITHUB_NAME}/{repo_name}.git"
+        remote_url = f"https://github.com/{GITHUB_NAME}/{repo_name}.git"
         git(REPO_PATH, "checkout", branch)
         for filepath, content in files_dict.items():
             logger.info(f"filepath value: '{filepath}'")
@@ -311,7 +309,7 @@ def push_multiple_files_to_branch(REPO_PATH, branch, files_dict, commit_msg):
                 logger.info("Commit skipped: no changes.")
             else:
                 raise
-        git(REPO_PATH, "push", authenticated_url, branch)
+        git(REPO_PATH, "push", remote_url, branch)
         logger.info(f"Push successful → branch: {branch}")
         return True
     except Exception as e:
