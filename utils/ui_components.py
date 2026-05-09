@@ -1,4 +1,6 @@
 import streamlit as st
+import os
+from utils.file_ops import get_filtered_repo_files
 
 class StepManager:
     def __init__(self):
@@ -15,17 +17,26 @@ class StepManager:
         self.current_step += 1 
     
 def render_file_uploader(selected_files_dict: dict) -> dict:
-        uploaded_file = st.file_uploader(
-            "📁 Add File From My Computer",
-            type=["md", "txt"],
-            key="flow2_uploader"
-        )
-        if uploaded_file is not None:
-            rel_path = uploaded_file.name
-            if rel_path not in selected_files_dict:
-                content = uploaded_file.read().decode("utf-8")
-                selected_files_dict[rel_path] = content
-                st.toast(f"Added: {rel_path}")
-            else:
-                st.warning("This file is already in the list.")
-        return selected_files_dict
+    repo_path = os.getenv("REPO_PATH", ".")
+    all_files = get_filtered_repo_files(repo_path)
+    
+    # Dosyayı repo'dan seç
+    selected = st.selectbox(
+        "📁 Select file from repo",
+        options=[""] + all_files,
+        key="flow2_file_select",
+        label_visibility="collapsed",
+        placeholder="Select a file..."
+    )
+    
+    if st.button("➕ Add to Editor", key="flow2_add_btn", disabled=not selected):
+        if selected not in selected_files_dict:
+            abs_path = os.path.join(repo_path, selected)
+            with open(abs_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            selected_files_dict[selected] = content
+            st.toast(f"Added: {selected}")
+        else:
+            st.warning("Already in the list.")
+    
+    return selected_files_dict
